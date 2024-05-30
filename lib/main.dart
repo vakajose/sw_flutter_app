@@ -183,7 +183,7 @@ class UserPage extends StatelessWidget {
         title: const Text('User Page'),
       ),
       body: const Center(
-        child: Text('Welcome to the User Page!'),
+        child: Text('Welcome to the User Page! :o'),
       ),
     );
   }
