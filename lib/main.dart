@@ -1,9 +1,14 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 // ignore: unnecessary_import
 import 'package:flutter/widgets.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:odoo_rpc/odoo_rpc.dart';
+import 'package:http/http.dart' as http;
+
+//import 'package:odoo_rpc/odoo_rpc.dart';
 
 void main() {
   runApp(const ScheEdu());
@@ -112,9 +117,40 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
 
   // Replace with your authentication logic (e.g., Firebase)
-  bool _authenticate(String username, String password) {
+  /*bool _authenticate(String username, String password) {
     // Simulate successful login for demo purposes
     return username == "test" && password == "test123";
+  }*/
+  Future<bool> _authenticate(String username, String password) async {
+    try {
+      print(username);
+      print(password);
+      var reqBody = {
+        "ci": username,
+        "apellido": password,
+      };
+      final response = await http.post(
+        Uri.parse('https://mdx0svcs-5000.brs.devtunnels.ms/api/login'), // Replace with your actual endpoint
+        body: jsonEncode(reqBody),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      );
+      print(response.body);
+      if (response.statusCode == 200) {
+        // Successful authentication
+        // You might want to parse the response and store authentication tokens here
+        return true;
+      } else {
+        // Authentication failed
+        // Handle errors, display messages, etc.
+        return false;
+      }
+    } catch (e) {
+      // Handle network errors
+      print('Error during authentication: $e');
+      return false;
+    }
   }
 
   void _navigateToUserPage() {
@@ -152,10 +188,10 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   String username = _usernameController.text;
                   String password = _passwordController.text;
-                  if (_authenticate(username, password)) {
+                  if (await _authenticate(username, password)) {
                     _navigateToUserPage();
                   } else {
                     // Show error message
@@ -184,6 +220,56 @@ class UserPage extends StatefulWidget {
 }
 
 class _UserPageState extends State<UserPage> {
+  /* odoo test
+  List<Map<String, dynamic>> alumnos = [];
+  bool isLoading = false; // Flag to indicate data fetching status
+
+  Future<void> fetchData() async {
+    setState(() {
+      isLoading = true; // Set loading indicator
+    });
+    // Existing code for Odoo connection, API call, and error handling
+    const url = 'http://192.168.3.69:8085';
+    const db = 'odooExamen';
+    const username = 'usuario_api';
+    const password = '5362fc5061dd406b74b55be9dd640faa5cc45084';
+    final odoo = OdooClient(url);
+    try {
+      // Authenticate with Odoo server (if required)
+      print(odoo.baseURL);
+      print('No authenticated');
+      final session = await odoo.authenticate(db, username, password);
+      print(session.userId);
+      print('Authenticated');
+      // Call the 'search_read' method to retrieve data
+      final result = await odoo.callKw({
+        'model': "colegios.alumno",
+        'method': "search_read",
+        'args': [],
+      });
+      print("Odoo" + result.result);
+      setState(() {
+        alumnos = result.result;
+        isLoading = false; // Clear loading indicator
+      });
+    } on OdooException catch (e) {
+      print("Odoo error: ${e.message}");
+    } catch (e) {
+      print("Error: ${e.toString()}");
+    } finally {
+      // Close the Odoo connection (optional)
+      odoo.close();
+    }
+    // ...
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    fetchData(); // Call data fetching on initialization
+  }
+
+  // odoo test */
   DateTime _selectedDay = DateTime.now();
   @override
   Widget build(BuildContext context) {
@@ -196,6 +282,27 @@ class _UserPageState extends State<UserPage> {
           children: [
             calendar(),
             const Text('Welcome to the User Page! :o'),
+            /*FutureBuilder(
+              future: fetchData(), // Replace with your data fetching function
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const CircularProgressIndicator(); // Show loading indicator
+                } else if (snapshot.hasError) {
+                  return Text('Error: ${snapshot.error}'); // Show error message
+                } else {
+                  return ListView.builder(
+                    // ... list view code with retrieved data
+                    itemCount: alumnos.length,
+                    itemBuilder: (context, index) {
+                      final alumno = alumnos[index];
+                      // Access and display specific fields here
+                      return Text('Name: ${alumno['nombre']}'); // Example
+                    },
+                  );
+                }
+              },
+            ),
+          */
           ],
         ),
       ),
@@ -323,9 +430,7 @@ void getOdooData() async {
   const password = '5362fc5061dd406b74b55be9dd640faa5cc45084';
 
   // Create an OdooClient instance
-  final odoo = OdooClient(
-    url
-  );
+  final odoo = OdooClient(url);
 
   try {
     // Authenticate with Odoo server
@@ -335,13 +440,11 @@ void getOdooData() async {
     //await odoo.login(username: username, password: password);
 
     // Call the 'search_read' method to retrieve data
-    final result = await odoo.callKw(
-      {
-        'model': "colegios.alumno",
-        'method': "search_read",
-        'args': [],
-      }
-    );
+    final result = await odoo.callKw({
+      'model': "colegios.alumno",
+      'method': "search_read",
+      'args': [],
+    });
 
     // Access the retrieved data (list of maps)
     final alumnos = result.result;
