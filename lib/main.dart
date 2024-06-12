@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+// ignore: unnecessary_import
+import 'package:flutter/widgets.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:intl/intl.dart';
+import 'package:odoo_rpc/odoo_rpc.dart';
 
 void main() {
   runApp(const ScheEdu());
@@ -35,7 +39,6 @@ class ScheEdu extends StatelessWidget {
 
       // *** home: const MyHomePage(title: 'Flutter Demo Home Page'),
       home: const LoginPage(),
-
     );
   }
 }
@@ -82,7 +85,7 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
     );
   }
-  
+
   Widget content() {
     return Column(
       children: [
@@ -174,29 +177,186 @@ class _LoginPageState extends State<LoginPage> {
 }
 
 // Placeholder UserPage (replace with your actual user page)
-class UserPage extends StatelessWidget {
+class UserPage extends StatefulWidget {
   const UserPage({super.key});
+  @override
+  State<UserPage> createState() => _UserPageState();
+}
+
+class _UserPageState extends State<UserPage> {
+  DateTime _selectedDay = DateTime.now();
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('User Page'),
       ),
-      body: const Center(
-        child: Text('Welcome to the User Page! :o'),
+      body: Center(
+        child: Column(
+          children: [
+            calendar(),
+            const Text('Welcome to the User Page! :o'),
+          ],
+        ),
       ),
     );
   }
 
   Widget calendar() {
-    return Column(
-      children: [
-        TableCalendar(
-          firstDay: DateTime.utc(2010, 10, 16),
-          lastDay: DateTime.utc(2030, 3, 14),
-          focusedDay: DateTime.now(),
-        )
-      ],
+    return TableCalendar(
+      firstDay: DateTime.utc(2010, 10, 16),
+      lastDay: DateTime.utc(2030, 3, 14),
+      focusedDay: DateTime.now(),
+      selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+      onDaySelected: (selectedDay, focusedDay) {
+        setState(() {
+          _selectedDay = selectedDay;
+        });
+        // Navigate to the TaskPage with the selected date
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TaskPage(selectedDate: _selectedDay),
+          ),
+        );
+      },
     );
+  }
+}
+
+class Event {
+  final String title;
+  final String description;
+  final DateTime date;
+  Event({
+    required this.title,
+    required this.description,
+    required this.date,
+  });
+}
+
+class TaskPage extends StatelessWidget {
+  final DateTime selectedDate;
+  const TaskPage({super.key, required this.selectedDate});
+
+  // Placeholder for fetching events - replace with your actual logic
+  Future<List<Event>> _fetchEvents(DateTime date) async {
+    // Simulate fetching events - replace with your actual data source
+    await Future.delayed(const Duration(seconds: 1));
+    return [
+      Event(
+        title: 'Meeting with Professor',
+        description: 'Discuss research project progress.',
+        date: DateTime(date.year, date.month, date.day, 10, 0), // 10:00 AM
+      ),
+      Event(
+        title: 'Study Group Session',
+        description: 'Review chapter 5 for upcoming exam.',
+        date: DateTime(date.year, date.month, date.day, 15, 30), // 3:30 PM
+      ),
+    ];
+  }
+
+  /*
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Tasks for ${selectedDate.toLocal()}'), // Display date
+      ),
+      body: Center(
+        // Replace this with your actual task fetching and display logic
+        child: Text('Display tasks for ${selectedDate.toLocal()} here'), 
+      ),
+    );
+  }
+  */
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title:
+            Text('Tasks for ${DateFormat('MM/dd/yyyy').format(selectedDate)}'),
+      ),
+      body: FutureBuilder<List<Event>>(
+        future: _fetchEvents(selectedDate),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('No events found.'));
+          } else {
+            return ListView.builder(
+              itemCount: snapshot.data!.length,
+              itemBuilder: (context, index) {
+                final event = snapshot.data![index];
+                return Card(
+                  child: ListTile(
+                    title: Text(event.title),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(event.description),
+                        Text(
+                            'Date: ${DateFormat('MM/dd/yyyy').format(event.date)}'),
+                        Text('Hour: ${DateFormat('HH:mm').format(event.date)}'),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          }
+        },
+      ),
+    );
+  }
+}
+
+void getOdooData() async {
+  // Odoo server connection details (replace with your actual values)
+  const url = 'http://192.168.3.69:8085';
+  const db = 'odooExamen';
+  const username = 'usuario_api';
+  const password = '5362fc5061dd406b74b55be9dd640faa5cc45084';
+
+  // Create an OdooClient instance
+  final odoo = OdooClient(
+    url
+  );
+
+  try {
+    // Authenticate with Odoo server
+    final session = await odoo.authenticate(db, username, password);
+    print(session);
+    print('Authenticated');
+    //await odoo.login(username: username, password: password);
+
+    // Call the 'search_read' method to retrieve data
+    final result = await odoo.callKw(
+      {
+        'model': "colegios.alumno",
+        'method': "search_read",
+        'args': [],
+      }
+    );
+
+    // Access the retrieved data (list of maps)
+    final alumnos = result.result;
+
+    // Print or process the retrieved data
+    for (var alumno in alumnos) {
+      print(alumno); // Example: {'id': 123, 'name': 'John Doe', ...}
+      // Access specific fields using alumno['field_name']
+    }
+  } on OdooException catch (e) {
+    print("Odoo error: ${e.message}");
+  } catch (e) {
+    print("Error: ${e.toString()}");
+  } finally {
+    // Close the Odoo connection (optional)
+    odoo.close();
   }
 }
