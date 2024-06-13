@@ -226,8 +226,12 @@ class QuestionnairePage extends StatefulWidget {
 class Questionnaire {
   final List<SubjectAssessment> questionnaire;
   final String explanation;
+  final String id;
 
-  Questionnaire({required this.questionnaire, required this.explanation});
+  Questionnaire({required this.questionnaire, required this.explanation,
+  required this.id
+  }
+  );
 
   factory Questionnaire.fromJson(Map<String, dynamic> json) {
     return Questionnaire(
@@ -235,6 +239,7 @@ class Questionnaire {
           .map((item) => SubjectAssessment.fromJson(item))
           .toList(),
       explanation: json['explicacion'],
+      id: json['id'],
     );
   }
 }
