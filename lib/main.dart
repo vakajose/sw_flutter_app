@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 void main() {
   runApp(const ScheEdu());
@@ -181,7 +182,8 @@ class _UserPageState extends State<UserPage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => QuestionnairePage(studentId: studentId),
+                    builder: (context) =>
+                        QuestionnairePage(studentId: studentId),
                   ),
                 );
               },
@@ -214,6 +216,7 @@ class _UserPageState extends State<UserPage> {
   }
 }
 
+// --- GET questionaire
 class QuestionnairePage extends StatefulWidget {
   final int studentId;
 
@@ -228,10 +231,10 @@ class Questionnaire {
   final String explanation;
   final String id;
 
-  Questionnaire({required this.questionnaire, required this.explanation,
-  required this.id
-  }
-  );
+  Questionnaire(
+      {required this.questionnaire,
+      required this.explanation,
+      required this.id});
 
   factory Questionnaire.fromJson(Map<String, dynamic> json) {
     return Questionnaire(
@@ -245,24 +248,33 @@ class Questionnaire {
 }
 
 class SubjectAssessment {
-  final List<Question> assessment;
+  final List<BaseQuestion> assessment;
   final String subject;
   final double average;
 
-  SubjectAssessment({required this.assessment, required this.subject, required this.average});
+  SubjectAssessment(
+      {required this.assessment, required this.subject, required this.average});
 
   factory SubjectAssessment.fromJson(Map<String, dynamic> json) {
     return SubjectAssessment(
-      assessment: (json['evaluacion'] as List)
-          .map((item) => Question.fromJson(item))
-          .toList(),
+      assessment: (json['evaluacion'] as List).map((item) {
+        if (item.containsKey('respuesta') && item.containsKey('calificacion')) {
+          return Question2.fromJson(item);
+        } else {
+          return Question.fromJson(item);
+        }
+      }).toList(),
       subject: json['materia'],
       average: json['promedio'].toDouble(),
     );
   }
 }
 
-class Question {
+abstract class BaseQuestion {
+  String get question;
+}
+
+class Question implements BaseQuestion {
   final String question;
 
   Question({required this.question});
@@ -274,9 +286,31 @@ class Question {
   }
 }
 
+// QUESTION 2ND RESPONSE
+class Question2 implements BaseQuestion {
+  final String question;
+  final String answer;
+  final String grade;
+
+  Question2({
+    required this.question,
+    required this.answer,
+    required this.grade,
+  });
+
+  factory Question2.fromJson(Map<String, dynamic> json) {
+    return Question2(
+      question: json['pregunta'] ?? '',
+      answer: json['respuesta'] ?? '',
+      grade: json['calificacion'] ?? '',
+    );
+  }
+}
+
 Future<Questionnaire> fetchQuestionnaire(int studentId) async {
   final response = await http.get(
-    Uri.parse('http://vakajose.online:5000/api/init_recomendaciones/$studentId'),
+    Uri.parse(
+        'http://vakajose.online:5000/api/init_recomendaciones/$studentId'),
   );
   if (response.statusCode == 200) {
     return Questionnaire.fromJson(jsonDecode(response.body));
@@ -284,6 +318,64 @@ Future<Questionnaire> fetchQuestionnaire(int studentId) async {
     throw Exception('Failed to load questionnaire');
   }
 }
+// --- END GET questionaire
+
+// ---Evaluation
+class EvaluationResponse {
+  final Recommendations recommendations;
+  final String status;
+  EvaluationResponse({required this.recommendations, required this.status});
+  factory EvaluationResponse.fromJson(Map<String, dynamic> json) {
+    return EvaluationResponse(
+      recommendations: Recommendations.fromJson(json['recomendaciones']),
+      status: json['status'],
+    );
+  }
+}
+
+class Recommendations {
+  final List<SubjectAssessment> questionnaire;
+  final String explanation;
+  final String recommendations; // Added for the markdown recommendations
+  Recommendations({
+    required this.questionnaire,
+    required this.explanation,
+    required this.recommendations, // Added this field
+  });
+  factory Recommendations.fromJson(Map<String, dynamic> json) {
+    return Recommendations(
+      questionnaire: (json['cuestionario'] as List)
+          .map((item) => SubjectAssessment.fromJson(item))
+          .toList(),
+      explanation: json['explicacion'],
+      recommendations: json['recomendaciones'], // Parse the recommendations
+    );
+  }
+}
+
+Future<EvaluationResponse> sendEvaluation(
+    int studentId, Map<String, dynamic> answers) async {
+  try {
+    final response = await http.post(
+      Uri.parse('http://vakajose.online:5000/api/evaluaciones'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'alumno_id': studentId,
+        'respuestas': answers,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return EvaluationResponse.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception(
+          'Failed to send evaluation: ${response.statusCode} ${response.reasonPhrase}');
+    }
+  } catch (e) {
+    throw Exception('Failed to send evaluation: $e');
+  }
+}
+// ---END Evaluation
 
 class _QuestionnairePageState extends State<QuestionnairePage> {
   late Future<Questionnaire> _questionnaireFuture;
@@ -294,6 +386,7 @@ class _QuestionnairePageState extends State<QuestionnairePage> {
   void initState() {
     super.initState();
     _questionnaireFuture = fetchQuestionnaire(widget.studentId);
+    _controllers = [];
   }
 
   @override
@@ -305,77 +398,197 @@ class _QuestionnairePageState extends State<QuestionnairePage> {
   }
 
   @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(
-      title: const Text('AI Tutoring Questionnaire'),
-    ),
-    body: Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: FutureBuilder<Questionnaire>(
-        future: _questionnaireFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          } else if (snapshot.hasData) {
-            final questionnaire = snapshot.data!;
-            // Correctly calculate the total number of questions
-            int totalQuestions = questionnaire.questionnaire.fold(
-                0, (sum, item) => sum + item.assessment.length);
-            _controllers = List.generate(
-              totalQuestions,
-              (index) => TextEditingController(),
-            );
-            int questionIndex = 0; // Keep track of the overall question index
-            return SingleChildScrollView(
-              child: Form(
-                key: _formKey,
-                child: Column(
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('AI Tutoring Questionnaire'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: FutureBuilder<Questionnaire>(
+          future: _questionnaireFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            } else if (snapshot.hasError) {
+              return Center(child: Text('Error: ${snapshot.error}'));
+            } else if (snapshot.hasData) {
+              final questionnaire = snapshot.data!;
+              // Correctly calculate the total number of questions
+              int totalQuestions = questionnaire.questionnaire
+                  .fold(0, (sum, item) => sum + item.assessment.length);
+              _controllers = List.generate(
+                totalQuestions,
+                (index) => TextEditingController(),
+              );
+              int questionIndex = 0; // Keep track of the overall question index
+              return SingleChildScrollView(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var subjectAssessment in questionnaire.questionnaire)
+                        for (var question in subjectAssessment.assessment) ...[
+                          Text(question.question),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            controller: _controllers[
+                                questionIndex++], // Use and increment the overall question index
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter an answer';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ElevatedButton(
+                        onPressed: () {
+                          if (_formKey.currentState!.validate()) {
+                            // Extract answers and format them for the API
+                            Map<String, dynamic> answersPayload =
+                                _formatAnswersForAPI(
+                                    widget.studentId,
+                                    _controllers,
+                                    snapshot.data!.questionnaire,
+                                    questionnaire);
+                            // Send the evaluation
+                            sendEvaluation(widget.studentId, answersPayload)
+                                .then((evaluationResponse) {
+                              // Navigate to the results page
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ResultsPage(
+                                      evaluationResponse: evaluationResponse),
+                                ),
+                              );
+                            }).catchError((error) {
+                              // Handle errors, e.g., show a snackbar
+                              print('Error sending evaluation: $error');
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content:
+                                      Text('Error sending evaluation: $error'),
+                                ),
+                              );
+                            });
+                          }
+                        },
+                        child: const Text('Evaluate'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            } else {
+              return const Center(child: Text('No questionnaire found.'));
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _formatAnswersForAPI(
+    int studentId,
+    List<TextEditingController> controllers,
+    List<SubjectAssessment> questionnaireData,
+    Questionnaire questionnaire,
+  ) {
+    int questionIndex = 0;
+    List<Map<String, dynamic>> formattedQuestionnaire = [];
+    for (var subjectAssessment in questionnaireData) {
+      List<Map<String, dynamic>> formattedAssessment = [];
+      for (var question in subjectAssessment.assessment) {
+        formattedAssessment.add({
+          'pregunta': question.question,
+          'respuesta': controllers[questionIndex].text,
+        });
+        questionIndex++;
+      }
+      formattedQuestionnaire.add({
+        'materia': subjectAssessment.subject,
+        'promedio': subjectAssessment.average,
+        'evaluacion': formattedAssessment,
+      });
+    }
+    return {
+      'cuestionario': formattedQuestionnaire,
+      'explicacion': questionnaire.explanation ?? '',
+      'id': questionnaire.id ?? '',
+    };
+  }
+}
+
+class ResultsPage extends StatelessWidget {
+  final EvaluationResponse evaluationResponse;
+  const ResultsPage({super.key, required this.evaluationResponse});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Evaluation Results'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var subjectAssessment
+                  in evaluationResponse.recommendations.questionnaire)
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (var subjectAssessment in questionnaire.questionnaire)
-                      for (var question in subjectAssessment.assessment) ...[
-                        Text(question.question),
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          controller: _controllers[questionIndex++], // Use and increment the overall question index
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter an answer';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                    ElevatedButton(
-                      onPressed: () {
-                        if (_formKey.currentState!.validate()) {
-                          // Process the answers (e.g., send to an AI model)
-                          List<String> answers = _controllers.map((c) => c.text).toList();
-                          // ... Your logic to handle the answers ...
-                        }
-                      },
-                      child: const Text('Evaluate'),
-                    ),
+                    Text('Subject: ${subjectAssessment.subject}',
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    for (var assessment in subjectAssessment.assessment)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                              'Question: ${(assessment as Question2).question}'),
+                          Text(
+                              'Answer: ${(assessment as Question2).answer ?? ''}'),
+                          Text(
+                              'Grade: ${(assessment as Question2).grade ?? ''}'),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
                   ],
                 ),
+              const SizedBox(height: 16),
+              Text('Explanation:',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              MarkdownBody(
+                data: evaluationResponse.recommendations.explanation,
               ),
-            );
-          } else {
-            return const Center(child: Text('No questionnaire found.'));
-          }
-        },
+              const SizedBox(height: 16),
+              Text('Recommendations:',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              MarkdownBody(
+                data: evaluationResponse.recommendations.recommendations,
+              ),
+            ],
+          ),
+        ),
       ),
-    ),
-  );
-}
+    );
   }
+}
 
 class Event {
   final String title;
@@ -414,7 +627,8 @@ class TaskPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Tasks for ${DateFormat('MM/dd/yyyy').format(selectedDate)}'),
+        title:
+            Text('Tasks for ${DateFormat('MM/dd/yyyy').format(selectedDate)}'),
       ),
       body: FutureBuilder<List<Event>>(
         future: _fetchEvents(selectedDate),
@@ -437,7 +651,8 @@ class TaskPage extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(event.description),
-                        Text('Date: ${DateFormat('MM/dd/yyyy').format(event.date)}'),
+                        Text(
+                            'Date: ${DateFormat('MM/dd/yyyy').format(event.date)}'),
                         Text('Hour: ${DateFormat('HH:mm').format(event.date)}'),
                       ],
                     ),
