@@ -61,6 +61,25 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
+class StudentIdProvider extends InheritedWidget {
+  final int studentId;
+
+  const StudentIdProvider({
+    Key? key,
+    required this.studentId,
+    required Widget child,
+  }) : super(key: key, child: child);
+
+  static StudentIdProvider? of(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<StudentIdProvider>();
+  }
+
+  @override
+  bool updateShouldNotify(StudentIdProvider oldWidget) {
+    return oldWidget.studentId != studentId;
+  }
+}
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -73,7 +92,7 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   String? _errorMessage;
 
-  Future<String?> _authenticate(String username, String password) async {
+  Future<int?> _authenticate(String username, String password) async {
     try {
       var reqBody = {
         "ci": username,
@@ -87,24 +106,34 @@ class _LoginPageState extends State<LoginPage> {
           'Accept': 'application/json',
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
-          'x-requested-with': 'XMLHttpRequest'  
+          'x-requested-with': 'XMLHttpRequest'
         },
       );
       if (response.statusCode == 200) {
-        return null;  // No error
+        var responseBody = jsonDecode(response.body);
+        if (responseBody['status'] == 'success') {
+          return responseBody['alumno'][0]['id']; // Return student ID
+        } else {
+          return null;
+        }
       } else {
-        return 'Server error: ${response.statusCode} ${response.reasonPhrase}';
+        return null;
       }
     } catch (e) {
       print('Error during authentication: $e');
-      return 'Error during authentication: $e';
+      return null;
     }
   }
 
-  void _navigateToUserPage() {
+  void _navigateToUserPage(int studentId) {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => const UserPage()),
+      MaterialPageRoute(
+        builder: (context) => StudentIdProvider(
+          studentId: studentId,
+          child: const UserPage(),
+        ),
+      ),
     );
   }
 
@@ -146,9 +175,9 @@ class _LoginPageState extends State<LoginPage> {
                 onPressed: () async {
                   String username = _usernameController.text;
                   String password = _passwordController.text;
-                  String? errorMessage = await _authenticate(username, password);
-                  if (errorMessage == null) {
-                    _navigateToUserPage();
+                  int? studentId = await _authenticate(username, password);
+                  if (studentId != null) {
+                    _navigateToUserPage(studentId);
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -156,7 +185,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     );
                     setState(() {
-                      _errorMessage = errorMessage;
+                      _errorMessage = 'Invalid username or password';
                     });
                   }
                 },
@@ -182,32 +211,58 @@ class _UserPageState extends State<UserPage> {
 
   @override
   Widget build(BuildContext context) {
+    final studentId = StudentIdProvider.of(context)?.studentId;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('User Page'),
+        actions: [
+          IconButton(
+            onPressed: () => _logout(context),
+            icon: const Icon(Icons.logout),
+          ),
+        ],
       ),
       body: Center(
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             calendar(),
+            const SizedBox(height: 20),
             const Text('Welcome to the User Page! :o'),
+            const SizedBox(height: 10),
+            if (studentId != null)
+              Text('Student ID: $studentId', style: const TextStyle(fontSize: 18)),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
-                int studentId = 1;
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        QuestionnairePage(studentId: studentId),
-                  ),
-                );
+                if (studentId != null) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => QuestionnairePage(studentId: studentId),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Student ID not found. Please log in again.'),
+                    ),
+                  );
+                }
               },
               child: const Text('AI TUTORING'),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _logout(BuildContext context) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginPage()),
     );
   }
 
@@ -397,6 +452,7 @@ class _QuestionnairePageState extends State<QuestionnairePage> {
   late Future<Questionnaire> _questionnaireFuture;
   final _formKey = GlobalKey<FormState>();
   late List<TextEditingController> _controllers;
+  bool _isLoading = false; // Add a loading state
 
   @override
   void initState() {
@@ -430,13 +486,14 @@ class _QuestionnairePageState extends State<QuestionnairePage> {
               return Center(child: Text('Error: ${snapshot.error}'));
             } else if (snapshot.hasData) {
               final questionnaire = snapshot.data!;
-              // Correctly calculate the total number of questions
               int totalQuestions = questionnaire.questionnaire
                   .fold(0, (sum, item) => sum + item.assessment.length);
-              _controllers = List.generate(
-                totalQuestions,
-                (index) => TextEditingController(),
-              );
+              if (_controllers.isEmpty) {
+                _controllers = List.generate(
+                  totalQuestions,
+                  (index) => TextEditingController(),
+                );
+              }
               int questionIndex = 0; // Keep track of the overall question index
               return SingleChildScrollView(
                 child: Form(
@@ -463,41 +520,51 @@ class _QuestionnairePageState extends State<QuestionnairePage> {
                           ),
                           const SizedBox(height: 16),
                         ],
-                      ElevatedButton(
-                        onPressed: () {
-                          if (_formKey.currentState!.validate()) {
-                            // Extract answers and format them for the API
-                            Map<String, dynamic> answersPayload =
-                                _formatAnswersForAPI(
-                                    widget.studentId,
-                                    _controllers,
-                                    snapshot.data!.questionnaire,
-                                    questionnaire);
-                            // Send the evaluation
-                            sendEvaluation(widget.studentId, answersPayload)
-                                .then((evaluationResponse) {
-                              // Navigate to the results page
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ResultsPage(
-                                      evaluationResponse: evaluationResponse),
-                                ),
-                              );
-                            }).catchError((error) {
-                              // Handle errors, e.g., show a snackbar
-                              print('Error sending evaluation: $error');
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content:
-                                      Text('Error sending evaluation: $error'),
-                                ),
-                              );
-                            });
-                          }
-                        },
-                        child: const Text('Evaluate'),
-                      ),
+                      _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : ElevatedButton(
+                              onPressed: () {
+                                if (_formKey.currentState!.validate()) {
+                                  setState(() {
+                                    _isLoading = true; // Show loading indicator
+                                  });
+                                  Map<String, dynamic> answersPayload =
+                                      _formatAnswersForAPI(
+                                          widget.studentId,
+                                          _controllers,
+                                          snapshot.data!.questionnaire,
+                                          questionnaire);
+                                  sendEvaluation(
+                                          widget.studentId, answersPayload)
+                                      .then((evaluationResponse) {
+                                    setState(() {
+                                      _isLoading =
+                                          false; // Hide loading indicator
+                                    });
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ResultsPage(
+                                            evaluationResponse:
+                                                evaluationResponse),
+                                      ),
+                                    );
+                                  }).catchError((error) {
+                                    setState(() {
+                                      _isLoading =
+                                          false; // Hide loading indicator
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                            'Error sending evaluation: $error'),
+                                      ),
+                                    );
+                                  });
+                                }
+                              },
+                              child: const Text('Evaluate'),
+                            ),
                     ],
                   ),
                 ),
@@ -548,9 +615,28 @@ class ResultsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final studentId = StudentIdProvider.of(context)?.studentId;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Evaluation Results'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.home),
+            onPressed: () {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => StudentIdProvider(
+                    studentId: studentId!,
+                    child: const UserPage(),
+                  ),
+                ),
+                (Route<dynamic> route) => false,
+              );
+            },
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -558,48 +644,62 @@ class ResultsPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (var subjectAssessment
-                  in evaluationResponse.recommendations.questionnaire)
+              for (var subjectAssessment in evaluationResponse.recommendations.questionnaire)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Subject: ${subjectAssessment.subject}',
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text('Subject: ${subjectAssessment.subject}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     for (var assessment in subjectAssessment.assessment)
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                              'Question: ${(assessment as Question2).question}'),
-                          Text(
-                              'Answer: ${(assessment as Question2).answer ?? ''}'),
-                          Text(
-                              'Grade: ${(assessment as Question2).grade ?? ''}'),
+                          Text('Question: ${(assessment as Question2).question}'),
+                          Text('Answer: ${(assessment as Question2).answer ?? ''}'),
+                          Text('Grade: ${(assessment as Question2).grade ?? ''}'),
                           const SizedBox(height: 16),
                         ],
                       ),
                   ],
                 ),
               const SizedBox(height: 16),
-              Text('Explanation:',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('Explanation:', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              MarkdownBody(
-                data: evaluationResponse.recommendations.explanation,
-              ),
+              MarkdownBody(data: evaluationResponse.recommendations.explanation),
               const SizedBox(height: 16),
-              Text('Recommendations:',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('Recommendations:', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              MarkdownBody(
-                data: evaluationResponse.recommendations.recommendations,
-              ),
+              MarkdownBody(data: evaluationResponse.recommendations.recommendations),
             ],
           ),
+        ),
+      ),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: const Text('Return to Questionnaire'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (context) => const UserPage()),
+                    (Route<dynamic> route) => false,
+                  );
+                },
+                child: const Text('Return to User Page'),
+              ),
+            ),
+          ],
         ),
       ),
     );
