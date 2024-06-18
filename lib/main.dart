@@ -71,8 +71,9 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  String? _errorMessage;
 
-  Future<bool> _authenticate(String username, String password) async {
+  Future<String?> _authenticate(String username, String password) async {
     try {
       var reqBody = {
         "ci": username,
@@ -83,16 +84,20 @@ class _LoginPageState extends State<LoginPage> {
         body: jsonEncode(reqBody),
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+          'x-requested-with': 'XMLHttpRequest'  
         },
       );
       if (response.statusCode == 200) {
-        return true;
+        return null;  // No error
       } else {
-        return false;
+        return 'Server error: ${response.statusCode} ${response.reasonPhrase}';
       }
     } catch (e) {
       print('Error during authentication: $e');
-      return false;
+      return 'Error during authentication: $e';
     }
   }
 
@@ -115,6 +120,13 @@ class _LoginPageState extends State<LoginPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              Visibility(
+                visible: _errorMessage != null,
+                child: Text(
+                  _errorMessage ?? '',
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
               TextField(
                 controller: _usernameController,
                 decoration: const InputDecoration(
@@ -134,7 +146,8 @@ class _LoginPageState extends State<LoginPage> {
                 onPressed: () async {
                   String username = _usernameController.text;
                   String password = _passwordController.text;
-                  if (await _authenticate(username, password)) {
+                  String? errorMessage = await _authenticate(username, password);
+                  if (errorMessage == null) {
                     _navigateToUserPage();
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -142,6 +155,9 @@ class _LoginPageState extends State<LoginPage> {
                         content: Text('Invalid username or password'),
                       ),
                     );
+                    setState(() {
+                      _errorMessage = errorMessage;
+                    });
                   }
                 },
                 child: const Text('Login'),
