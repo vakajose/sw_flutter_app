@@ -25,42 +25,6 @@ class ScheEdu extends StatelessWidget {
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
-      ),
-      body: Center(
-        child: content(),
-      ),
-    );
-  }
-
-  Widget content() {
-    return Column(
-      children: [
-        TableCalendar(
-          firstDay: DateTime.utc(2010, 10, 16),
-          lastDay: DateTime.utc(2030, 3, 14),
-          focusedDay: DateTime.now(),
-        )
-      ],
-    );
-  }
-}
-
 class StudentIdProvider extends InheritedWidget {
   final int studentId;
 
@@ -546,9 +510,12 @@ class _QuestionnairePageState extends State<QuestionnairePage> {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => ResultsPage(
-                                            evaluationResponse:
-                                                evaluationResponse),
+                                        builder: (context) => StudentIdProvider(
+                                          studentId: widget.studentId,
+                                          child: ResultsPage(
+                                              evaluationResponse:
+                                                  evaluationResponse),
+                                        ),
                                       ),
                                     );
                                   }).catchError((error) {
@@ -631,7 +598,7 @@ class ResultsPage extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (context) => StudentIdProvider(
-                      studentId: studentId,
+                      studentId: studentId!,
                       child: const UserPage(),
                     ),
                   ),
@@ -705,7 +672,7 @@ class ResultsPage extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (context) => StudentIdProvider(
-                          studentId: studentId,
+                          studentId: studentId!,
                           child: const UserPage(),
                         ),
                       ),
