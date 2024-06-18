@@ -65,10 +65,10 @@ class StudentIdProvider extends InheritedWidget {
   final int studentId;
 
   const StudentIdProvider({
-    Key? key,
+    super.key,
     required this.studentId,
-    required Widget child,
-  }) : super(key: key, child: child);
+    required super.child,
+  });
 
   static StudentIdProvider? of(BuildContext context) {
     return context.dependOnInheritedWidgetOfExactType<StudentIdProvider>();
@@ -346,6 +346,7 @@ abstract class BaseQuestion {
 }
 
 class Question implements BaseQuestion {
+  @override
   final String question;
 
   Question({required this.question});
@@ -359,6 +360,7 @@ class Question implements BaseQuestion {
 
 // QUESTION 2ND RESPONSE
 class Question2 implements BaseQuestion {
+  @override
   final String question;
   final String answer;
   final String grade;
@@ -624,16 +626,24 @@ class ResultsPage extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.home),
             onPressed: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => StudentIdProvider(
-                    studentId: studentId!,
-                    child: const UserPage(),
+              if (studentId != null) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => StudentIdProvider(
+                      studentId: studentId,
+                      child: const UserPage(),
+                    ),
                   ),
-                ),
-                (Route<dynamic> route) => false,
-              );
+                  (Route<dynamic> route) => false,
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Student ID not found. Please log in again.'),
+                  ),
+                );
+              }
             },
           ),
         ],
@@ -655,19 +665,19 @@ class ResultsPage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('Question: ${(assessment as Question2).question}'),
-                          Text('Answer: ${(assessment as Question2).answer ?? ''}'),
-                          Text('Grade: ${(assessment as Question2).grade ?? ''}'),
+                          Text('Answer: ${(assessment).answer ?? ''}'),
+                          Text('Grade: ${(assessment).grade ?? ''}'),
                           const SizedBox(height: 16),
                         ],
                       ),
                   ],
                 ),
               const SizedBox(height: 16),
-              Text('Explanation:', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text('Explanation:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               MarkdownBody(data: evaluationResponse.recommendations.explanation),
               const SizedBox(height: 16),
-              Text('Recommendations:', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text('Recommendations:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               MarkdownBody(data: evaluationResponse.recommendations.recommendations),
             ],
@@ -690,11 +700,24 @@ class ResultsPage extends StatelessWidget {
             Expanded(
               child: ElevatedButton(
                 onPressed: () {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (context) => const UserPage()),
-                    (Route<dynamic> route) => false,
-                  );
+                  if (studentId != null) {
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => StudentIdProvider(
+                          studentId: studentId,
+                          child: const UserPage(),
+                        ),
+                      ),
+                      (Route<dynamic> route) => false,
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Student ID not found. Please log in again.'),
+                      ),
+                    );
+                  }
                 },
                 child: const Text('Return to User Page'),
               ),
