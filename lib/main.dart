@@ -4,6 +4,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() {
   runApp(const ScheEdu());
@@ -15,11 +16,19 @@ class ScheEdu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'App tutor y visualizacion de eventos de los alumnos',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
+      localizationsDelegates: [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: [
+        const Locale('es', 'MX'), // Español
+      ],
       home: const LoginPage(),
     );
   }
@@ -105,7 +114,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Login'),
+        title: const Text('Ingreso alumnos'),
       ),
       body: Center(
         child: Padding(
@@ -123,7 +132,7 @@ class _LoginPageState extends State<LoginPage> {
               TextField(
                 controller: _usernameController,
                 decoration: const InputDecoration(
-                  labelText: 'Username',
+                  labelText: 'Usuario',
                 ),
               ),
               const SizedBox(height: 10),
@@ -131,7 +140,7 @@ class _LoginPageState extends State<LoginPage> {
                 controller: _passwordController,
                 obscureText: true,
                 decoration: const InputDecoration(
-                  labelText: 'Password',
+                  labelText: 'Contraseña',
                 ),
               ),
               const SizedBox(height: 20),
@@ -153,7 +162,7 @@ class _LoginPageState extends State<LoginPage> {
                     });
                   }
                 },
-                child: const Text('Login'),
+                child: const Text('Ingresar'),
               ),
             ],
           ),
@@ -179,7 +188,7 @@ class _UserPageState extends State<UserPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('User Page'),
+        title: const Text('Hola de nuevo!'),
         actions: [
           IconButton(
             onPressed: () => _logout(context),
@@ -193,10 +202,10 @@ class _UserPageState extends State<UserPage> {
           children: [
             calendar(),
             const SizedBox(height: 20),
-            const Text('Welcome to the User Page! :o'),
+            const Text('Bienvenido a tu aplicacion de tutor!'),
             const SizedBox(height: 10),
             if (studentId != null)
-              Text('Student ID: $studentId', style: const TextStyle(fontSize: 18)),
+              Text('Identificación de alumno: $studentId', style: const TextStyle(fontSize: 18)),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
@@ -215,7 +224,7 @@ class _UserPageState extends State<UserPage> {
                   );
                 }
               },
-              child: const Text('AI TUTORING'),
+              child: const Text('TUTOR-IA'),
             ),
           ],
         ),
@@ -232,6 +241,7 @@ class _UserPageState extends State<UserPage> {
 
   Widget calendar() {
     return TableCalendar(
+      locale: 'es',
       firstDay: DateTime.utc(2010, 10, 16),
       lastDay: DateTime.utc(2030, 3, 14),
       focusedDay: DateTime.now(),
@@ -439,7 +449,7 @@ class _QuestionnairePageState extends State<QuestionnairePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Tutoring Questionnaire'),
+        title: const Text('Cuestionario Tutor-IA'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -479,7 +489,7 @@ class _QuestionnairePageState extends State<QuestionnairePage> {
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Please enter an answer';
+                                return 'Por favor, ingresa una respuesta';
                               }
                               return null;
                             },
@@ -532,7 +542,7 @@ class _QuestionnairePageState extends State<QuestionnairePage> {
                                   });
                                 }
                               },
-                              child: const Text('Evaluate'),
+                              child: const Text('Evaluar cuestionario'),
                             ),
                     ],
                   ),
@@ -588,7 +598,7 @@ class ResultsPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Evaluation Results'),
+        title: const Text('Resultados de la evaluación'),
         actions: [
           IconButton(
             icon: const Icon(Icons.home),
@@ -625,26 +635,26 @@ class ResultsPage extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Subject: ${subjectAssessment.subject}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text('Materia: ${subjectAssessment.subject}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     for (var assessment in subjectAssessment.assessment)
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Question: ${(assessment as Question2).question}'),
-                          Text('Answer: ${(assessment).answer ?? ''}'),
-                          Text('Grade: ${(assessment).grade ?? ''}'),
+                          Text('➢Pregunta: ${(assessment as Question2).question}'),
+                          Text('➢Respuesta: ${(assessment).answer ?? ''}'),
+                          Text('➢Calificación: ${(assessment).grade ?? ''}'),
                           const SizedBox(height: 16),
                         ],
                       ),
                   ],
                 ),
               const SizedBox(height: 16),
-              const Text('Explanation:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text('Explicación:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               MarkdownBody(data: evaluationResponse.recommendations.explanation),
               const SizedBox(height: 16),
-              const Text('Recommendations:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text('Recomendaciones:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               MarkdownBody(data: evaluationResponse.recommendations.recommendations),
             ],
@@ -660,7 +670,7 @@ class ResultsPage extends StatelessWidget {
                 onPressed: () {
                   Navigator.pop(context);
                 },
-                child: const Text('Return to Questionnaire'),
+                child: const Text('Volver al cuestionario'),
               ),
             ),
             const SizedBox(width: 10),
@@ -686,7 +696,7 @@ class ResultsPage extends StatelessWidget {
                     );
                   }
                 },
-                child: const Text('Return to User Page'),
+                child: const Text('Regresar a la página principal'),
               ),
             ),
           ],
