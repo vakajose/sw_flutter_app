@@ -395,7 +395,7 @@ class Recommendations {
           .map((item) => SubjectAssessment.fromJson(item))
           .toList(),
       explanation: json['explicacion'],
-      recommendations: json['recomendaciones'], // Parse the recommendations
+      recommendations: json['recomendacion'], // Parse the recommendations
     );
   }
 }
@@ -413,6 +413,7 @@ Future<EvaluationResponse> sendEvaluation(
     );
 
     if (response.statusCode == 200) {
+      print(response.body);
       return EvaluationResponse.fromJson(jsonDecode(response.body));
     } else {
       throw Exception(
